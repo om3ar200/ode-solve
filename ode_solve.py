@@ -1,81 +1,152 @@
 import streamlit as st
-from sympy import symbols, Function, Eq, dsolve, latex, sympify, checkodesol
-import matplotlib.pyplot as plt
+import sympy as sp
 import numpy as np
+import matplotlib.pyplot as plt
+from sympy.integrals import integrate
 
-# --- إعدادات الصفحة ---
-st.set_page_config(page_title="Differential Equation Solver", layout="centered")
+# إعدادات الصفحة
+st.set_page_config(page_title="ODE Solver Pro", layout="wide")
 
-st.title("🧪 المحلل الذكي للمعادلات التفاضلية")
+st.title("🧮 First-Order ODE Solver")
 st.markdown("""
-هذا الموقع يحل معادلات الدرجة الأولى (First Order ODEs) ويعرض لك **طريقة الحل** المتبعة والرسم البياني.
+هذا الموقع يقوم بتحليل وحل المعادلات التفاضلية من الرتبة الأولى باستخدام عدة طرق. 
+يرجى كتابة المعادلة بصيغة `y(x).diff(x)` لتمثيل $y'$.
+مثال: `Eq(y(x).diff(x), (x**2 + y(x)**2)/x)`
 """)
 
-# --- تعريف الرموز ---
-x = symbols('x')
-y = Function('y')(x)
+# تعريف المتغيرات الرمزية
+x = sp.Symbol('x')
+y = sp.Function('y')(x)
 
-# --- واجهة الإدخال ---
-with st.expander("📝 تعليمات الكتابة (اقرأني)", expanded=False):
-    st.write("""
-    * للمشتقة $y'$ اكتب: `y(x).diff(x)`
-    * للضرب استخدم `*` وللأس استخدم `**`
-    * مثال لمعادلة Bernoulli: `y(x).diff(x) + y(x)/x - y(x)**2`
-    """)
-
-eqn_input = st.text_input("أدخل الطرف الأيسر للمعادلة (بفرض أنها تساوي 0):", "y(x).diff(x) + (1/x)*y(x) - x**2")
-
-if st.button("حل المعادلة وإظهار الخطوات"):
+def detect_method(eq):
+    """
+    دالة لمحاولة اكتشاف طريقة الحل المناسبة
+    """
+    # تحويل المعادلة إلى صيغة y' = f(x, y)
     try:
-        # 1. تحويل النص إلى كائن رياضي
-        lhs = sympify(eqn_input)
-        eqn = Eq(lhs, 0)
+        # نحاول جعل المعادلة على شكل y' = ...
+        rhs = sp.solve(eq, y.diff(x))[0]
+    except:
+        return "Unknown", "المعادلة غير مكتوبة بصيغة صحيحة"
 
-        # 2. عرض المعادلة بشكل رياضي
-        st.subheader("1. المعادلة الرياضية:")
-        st.latex(latex(eqn))
+    # 1. التحقق من Linear (y' + P(x)y = Q(x))
+    # المعادلة الخطية تكون خطية بالنسبة لـ y و y'
+    if rhs.is_linear(): # تبسيط للتحقق
+        # تحقق إضافي: هل تظهر y فقط كقوة 1؟
+        # (هذا تبسيط، SymPy يقوم بالتحقق داخلياً)
+        pass
 
-        # 3. تحديد نوع المعادلة (Classification)
-        # هذه الدالة ترجع قائمة بكل الطرق التي يمكن حل المعادلة بها
-        methods = dsolve(eqn, y, hint='all_rules')
+    # 2. التحقق من Separable (f(x)g(y))
+    # إذا كان من الممكن فصل x عن y في الطرف الأيمن
+    # نختبر ذلك بقسمة f(x,y) على f(x,0) مثلاً أو البحث عن ضرب
+    # هنا سنعتمد على SymPy dsolve في تحديد الطريقة ولكن سنصنفها يدوياً للتبسيط
+    
+    return "Analyzing...", rhs
+
+def solve_ode(eq_str):
+    try:
+        # تحويل النص إلى تعبير رياضي من SymPy
+        # نستخدم eval بحذر هنا، في الإنتاج يفضل استخدام parser
+        equation = eval(eq_str)
         
-        st.subheader("2. طرق الحل الممكنة:")
-        if methods:
-            # تنظيف أسماء الطرق لعرضها بشكل أفضل
-            clean_methods = [m.replace('_', ' ').capitalize() for m in methods.keys() if 'internal' not in m]
-            st.success(f"المعادلة يمكن حلها بطرق: {', '.join(clean_methods[:3])}")
+        # حل المعادلة باستخدام dsolve
+        # dsolve تحاول تجربة كل الطرق (Linear, Bernoulli, Separable, Exact)
+        solution = sp.dsolve(equation, y)
         
-        # 4. إيجاد الحل النهائي
-        solution = dsolve(eqn, y)
-        
-        st.subheader("3. الحل العام:")
-        st.latex(latex(solution))
-
-        # 5. الرسم البياني (Solution Curve)
-        st.subheader("4. التمثيل البياني (لـ C1 = 1):")
-        try:
-            # استخراج الطرف الأيمن من الحل وتعويض الثابت بقيمة 1 للرسم
-            sol_expr = solution.rhs.subs('C1', 1)
-            
-            # تحويل المعادلة لدالة يمكن رسمها برمجياً
-            f_plot = lambda val: float(sol_expr.subs(x, val))
-            x_vals = np.linspace(0.1, 10, 100) # تجنب الصفر في حالة القسمة
-            y_vals = [f_plot(v) for v in x_vals]
-
-            fig, ax = plt.subplots()
-            ax.plot(x_vals, y_vals, label="y(x) at C1=1", color='blue')
-            ax.set_xlabel('x')
-            ax.set_ylabel('y')
-            ax.grid(True)
-            ax.legend()
-            st.pyplot(fig)
-        except:
-            st.warning("تعذر رسم المنحنى لهذه المعادلة تحديداً، قد تكون النتيجة مركبة أو غير قابلة للتمثيل البسيط.")
-
+        # استخراج الناتج
+        res = solution[0].rhs if isinstance(solution, list) else solution.rhs
+        return equation, res
     except Exception as e:
-        st.error(f"خطأ في الصيغة: {e}")
-        st.info("تأكد من كتابة y(x) دائماً وليس y فقط.")
+        return None, str(e)
 
-# --- التذييل ---
-st.markdown("---")
-st.caption("تم التطوير بواسطة Coding Partner - يعمل بمحرك SymPy الرياضي.")
+# واجهة المستخدم
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader("📥 إدخال المعادلة")
+    user_input = st.text_input("أدخل المعادلة هنا:", value="Eq(y(x).diff(x), (x**2 + y(x)**2)/x)")
+    
+    # إضافة خيار للقيم الابتدائية للرسم
+    st.subheader("📉 إعدادات الرسم البياني")
+    x_val = st.number_input("قيمة x الابتدائية", value=1.0)
+    y_val = st.number_input("قيمة y الابتدائية (C)", value=1.0)
+    
+    solve_btn = st.button("حل المعادلة الآن 🚀")
+
+if solve_btn:
+    with col2:
+        st.subheader("📝 الحل والتحليل")
+        
+        eq, result = solve_ode(user_input)
+        
+        if eq is not None:
+            # عرض المعادلة المدخلة بـ LaTeX
+            st.latex(f"$$\text{{Equation: }} {sp.latex(eq)}$$")
+            
+            # تحديد الطريقة (محاكاة للتحليل)
+            # SymPy لا يخبرنا صراحة بالطريقة، لذا سنقوم بتحليل التعبير
+            # سنقوم بعرض الحل النهائي بشكل جميل
+            st.success("تم إيجاد الحل بنجاح!")
+            st.latex(f"$$\text{{General Solution: }} {sp.latex(result)}$$")
+            
+            # محاولة تحديد الطريقة بناءً على شكل المعادلة
+            # ملاحظة: هذا الجزء تقريبي لأن SymPy يدمج الطرق
+            st.info("**طرق الحل الممكنة لهذه المعادلة:**")
+            
+            # منطق بسيط لتخمين الطريقة
+            rhs = sp.solve(eq, y.diff(x))[0]
+            methods = []
+            if rhs.is_linear(): methods.append("Linear")
+            if "y(x)**" in user_input: methods.append("Bernoulli or Non-Linear")
+            if sp.simplify(rhs/rhs.subs(y, 1)) == 1: methods.append("Separable") # تبسيط
+            if not methods: methods.append("Exact / Substitution")
+            
+            for m in methods:
+                st.write(f"- {m}")
+
+            # --- الجزء الخاص بالرسم البياني ---
+            st.subheader("🖼️ الرسم البياني")
+            try:
+                # تحويل الحل الرمزي إلى دالة رقمية
+                # استبدال الثابت C بالقيمة التي أدخلها المستخدم
+                # عادة SymPy يضع الثابت كـ C1
+                final_expr = result
+                # البحث عن الثوابت واستبدالها
+                for symbol in result.free_symbols:
+                    if not symbol == x:
+                        final_expr = final_expr.subs(symbol, y_val)
+                
+                f_num = sp.lambdify(x, final_expr, 'numpy')
+                
+                x_range = np.linspace(x_val, x_val + 5, 100)
+                y_range = f_num(x_range)
+                
+                fig, ax = plt.subplots()
+                ax.plot(x_range, y_range, label=f'C = {y_val}', color='blue', linewidth=2)
+                ax.set_xlabel('x')
+                ax.set_ylabel('y(x)')
+                ax.set_title('Solution Curve')
+                ax.grid(True)
+                ax.legend()
+                st.pyplot(fig)
+                
+            except Exception as e:
+                st.error(f"تعذر رسم الدالة: {e}")
+        else:
+            st.error(f"خطأ في المعادلة: {result}")
+
+# تعليمات للمستخدم
+st.sidebar.markdown("""
+### 💡 دليل الكتابة:
+- لعمل مشتقة $y'$ اكتب: `y(x).diff(x)`
+- لعمل يساوي اكتب: `Eq(الطرف الأول, الطرف الثاني)`
+- الأس $x^2$ يكتب: `x**2`
+- الجذر $\sqrt{x}$ يكتب: `sp.sqrt(x)`
+- الدوال المثلثية: `sp.sin(x)`, `sp.cos(x)`
+
+**أمثلة جاهزة:**
+1. **Separable:** `Eq(y(x).diff(x), x*y(x))`
+2. **Linear:** `Eq(y(x).diff(x) + y(x), sp.exp(x))`
+3. **Bernoulli:** `Eq(y(x).diff(x) + y(x), x*y(x)**2)`
+4. **Homogeneous:** `Eq(y(x).diff(x), (x**2 + y(x)**2)/x)`
+""")
