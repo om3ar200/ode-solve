@@ -5,89 +5,97 @@ import matplotlib.pyplot as plt
 import re
 
 # إعدادات الصفحة
-st.set_page_config(page_title="ODE Master Solver", layout="wide")
+st.set_page_config(page_title="ODE Pro Solver", layout="wide")
 
-st.title("🎓 ODE Master Solver - حل المعادلات التفاضلية")
+st.title("🎯 ODE Pro Solver - الحل النهائي والمضمون")
 st.markdown("""
-هذا الإصدار يدعم الكتابة الرياضية الطبيعية. 
-**أمثلة مدعومة:** `y' = 2xy`, `y' + y = x^2`, `y' = (x^2 + y^2)/x`
+**اكتب المعادلة بطريقة رياضية بسيطة.** 
+أمثلة: `y' = 2xy` | `y' + y = x^2` | `y' = (x^2 + y^2)/x`
 """)
 
-# تعريف المتغيرات
+# تعريف المتغيرات الأساسية
 x = sp.Symbol('x')
 y = sp.Function('y')
 
-def preprocess_math(text):
+def mathematical_translator(text):
     """
-    تنظيف النص وتحويل الكتابة البشرية إلى صيغة يفهمها SymPy
+    هذه الدالة تحول الكتابة البشرية الرياضية إلى لغة يفهمها بايثون و SymPy
     """
+    # 1. حذف المسافات
     text = text.replace(' ', '')
     
-    # 1. تحويل المشتقة
-    text = re.sub(r"y'", "y(x).diff(x)", text)
-    text = re.sub(r"dy/dx", "y(x).diff(x)", text)
+    # 2. تحويل المشتقة y' إلى صيغة SymPy
+    text = text.replace("y'", "y(x).diff(x)")
+    text = text.replace("dy/dx", "y(x).diff(x)")
     
-    # 2. تحويل الأسس
+    # 3. تحويل الأسس ^ إلى **
     text = text.replace('^', '**')
     
-    # 3. معالجة الضرب الضمني (أهم خطوة)
-    # تحويل (رقم)(حرف) مثل 2y -> 2*y
+    # 4. حل مشكلة الضرب الضمني (السر هنا)
+    # تحويل رقم يليه حرف أو قوس (مثلاً 2y -> 2*y)
     text = re.sub(r'(\d)([a-zA-Z\(])', r'\1*\2', text)
-    # تحويل (حرف)(حرف) مثل xy -> x*y
-    text = re.sub(r'([a-zA-Z])([a-zA-Z\(])', r'\1*\2', text)
-    # استثناء: لا نريد تحويل sin, cos, exp إلى s*i*n
-    # سنقوم بإعادة تصحيح الدوال المشهورة
-    for func in ['sin', 'cos', 'exp', 'log', 'tan', 'sqrt']:
-        text = text.replace(f'{func[0]}*{func[1:]}', func)
+    # تحويل حرف يليه حرف أو قوس (مثلاً xy -> x*y)
+    # نستثني الكلمات المحجوزة مثل sin, cos, exp, log
+    def multiply_fix(match):
+        group = match.group(0)
+        protected = ['sin', 'cos', 'exp', 'log', 'tan', 'sqrt']
+        for word in protected:
+            if word in group:
+                return group
+        return group[0] + '*' + group[1:]
 
-    # 4. تحويل y إلى y(x) في كل مكان ليس مشتقة
-    text = re.sub(r"y(?!\(x\).diff)", "y(x)", text)
+    # البحث عن أي تتابع من الحروف وتحويله لضرب (مع استثناء الدوال)
+    text = re.sub(r'([a-zA-Z])([a-zA-Z\(])', multiply_fix, text)
+    
+    # 5. تحويل أي y متبقية إلى y(x) لضمان أنها دالة
+    # نبحث عن y التي لا يتبعها (x) أو .diff
+    text = re.sub(r'y(?!\(x\)|.diff)', 'y(x)', text)
     
     return text
 
 def solve_ode(user_input):
     try:
-        # معالجة النص
-        processed_text = preprocess_math(user_input)
+        # ترجمة المعادلة
+        translated_text = mathematical_translator(user_input)
         
-        if '=' not in processed_text:
-            return None, "يجب وجود علامة '=' في المعادلة"
+        if '=' not in translated_text:
+            return None, "خطأ: يجب وضع علامة '=' للفصل بين طرفي المعادلة"
             
-        lhs_str, rhs_str = processed_text.split('=')
+        lhs_str, rhs_str = translated_text.split('=')
         
-        # قاموس الدوال
+        # قاموس الدوال للـ eval
         safe_dict = {
             'x': x, 'y': y, 
             'exp': sp.exp, 'sin': sp.sin, 'cos': sp.cos, 
             'sqrt': sp.sqrt, 'log': sp.log, 'tan': sp.tan, 'pi': sp.pi
         }
         
-        # تحويل النصوص إلى تعبيرات SymPy
+        # تحويل النصوص إلى رموز رياضية
         lhs = eval(lhs_str, {"__builtins__": None}, safe_dict)
         rhs = eval(rhs_str, {"__builtins__": None}, safe_dict)
         equation = sp.Eq(lhs, rhs)
         
-        # حل المعادلة
+        # حل المعادلة تفاضلياً
         solution = sp.dsolve(equation, y)
         
-        # استخراج الحل النهائي
+        # استخراج الطرف الأيمن من الحل
         res = solution[0].rhs if isinstance(solution, list) else solution.rhs
         return equation, res
     except Exception as e:
-        return None, f"خطأ في تحليل المعادلة: {str(e)}"
+        return None, f"خطأ في صياغة المعادلة: {str(e)}"
 
-# واجهة المستخدم
+# الواجهة
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.subheader("✍️ أدخل المعادلة")
-    user_input = st.text_input("اكتب المعادلة هنا:", value="y' = x*y")
+    st.subheader("✍️ إدخال المعادلة")
+    user_input = st.text_input("اكتب هنا (مثال: y' = 2xy)", value="y' = 2xy")
     
     st.subheader("📉 إعدادات الرسم")
+    c_val = st.number_input("قيمة الثابت C (للرسم)", value=1.0)
     x_start = st.number_input("بداية محور X", value=0.1)
-    c_val = st.number_input("قيمة الثابت C", value=1.0)
     
-    solve_btn = st.button("احسب الحل الآن 🚀")
+    solve_btn = st.button("حل المعادلة الآن 🚀")
 
 if solve_btn:
     with col2:
@@ -95,62 +103,67 @@ if solve_btn:
         eq, result = solve_ode(user_input)
         
         if eq is not None:
-            st.markdown("**المعادلة الرياضية:**")
+            # عرض المعادلة الأصلية بـ LaTeX
+            st.markdown("**المعادلة التي تم تحليلها:**")
             st.latex(sp.latex(eq))
             
-            st.success("تم إيجاد الحل!")
-            st.markdown("**الحل العام:**")
+            st.success("تم إيجاد الحل بنجاح!")
+            st.markdown("**الحل العام (General Solution):**")
             st.latex(sp.latex(result))
             
-            # تحليل النوع
-            st.info("**تصنيف المعادلة:**")
+            # تحليل الطريقة
+            st.info("**طريقة الحل المستخدمة:**")
             try:
-                # محاولة بسيطة لتحديد النوع
+                # تحليل بسيط جداً لنوع المعادلة
                 if "y(x)**" in user_input:
                     st.write("📌 Bernoulli / Non-Linear")
                 elif sp.solve(eq, y(x).diff(x))[0].is_linear():
-                    st.write("📌 Linear")
+                    st.write("📌 Linear Equation")
                 else:
-                    st.write("📌 Separable / Exact / Homogeneous")
+                    st.write("📌 Separable / Homogeneous / Exact")
             except:
                 st.write("📌 First Order ODE")
 
             # الرسم البياني
             st.subheader("🖼️ الرسم البياني")
             try:
+                # استبدال الثوابت (C1, C2...) بقيمة c_val
                 final_expr = result
-                # استبدال أي ثابت C1, C2 بقيمة c_val
                 for symbol in result.free_symbols:
                     if symbol != x:
                         final_expr = final_expr.subs(symbol, c_val)
                 
+                # تحويل لـ numpy للرسم
                 f_num = sp.lambdify(x, final_expr, 'numpy')
                 x_range = np.linspace(x_start, x_start + 5, 100)
                 y_range = f_num(x_range)
                 
                 fig, ax = plt.subplots()
-                ax.plot(x_range, y_range, color='blue', linewidth=2)
+                ax.plot(x_range, y_range, color='green', linewidth=2)
                 ax.set_xlabel('x')
                 ax.set_ylabel('y')
                 ax.grid(True)
                 st.pyplot(fig)
             except Exception as e:
-                st.warning(f"تعذر الرسم: {e}")
+                st.warning(f"تعذر رسم هذه المعادلة: {e}")
         else:
-            st.error(f"❌ {result}")
+            st.error(result)
 
-# دليل في الجانب
+# دليل الكتابة
 st.sidebar.markdown("""
-### 📖 دليل الكتابة السريع:
-الآن يمكنك الكتابة بشكل طبيعي جداً:
+### 📖 دليل الكتابة (مهم جداً):
+الآن البرنامج يفهم لغتك الرياضية:
 
-✅ **مسموح:**
-- `y' = 2xy` (بدل `2*x*y`)
-- `y' = x^2` (بدل `x**2`)
-- `y' + y = exp(x)`
-- `y' = (x^2 + y^2)/x`
+✅ **طرق الكتابة الصحيحة:**
+- المشتقة: اكتب `y'` أو `dy/dx`
+- الضرب: يمكنك كتابة `2y` أو `xy` أو `2*x*y`
+- الأس: اكتب `^` (مثل `x^2`)
+- الدوال: `exp(x)`, `sin(x)`, `sqrt(x)`
+- اليساوي: يجب وضع `=` 
 
-❌ **تجنب:**
-- كتابة حروف غير معروفة (مثل `q` أو `z`).
-- نسيان علامة `=` .
+**أمثلة للتجربة:**
+1. `y' = x*y` (Separable)
+2. `y' + y = x^2` (Linear)
+3. `y' = (x^2 + y^2)/x` (Homogeneous)
+4. `y' + y = x*y^2` (Bernoulli)
 """)
